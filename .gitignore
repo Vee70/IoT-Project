@@ -1,3 +1,5 @@
 /venv
 /pcap_parser/data
-/__pycache__
+
+*.pyc
+*.pyo
