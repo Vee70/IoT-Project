@@ -1,2 +1,3 @@
 /venv
 /pcap_parser/data
+/__pycache__
