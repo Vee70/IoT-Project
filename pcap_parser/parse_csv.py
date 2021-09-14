@@ -8,23 +8,8 @@ import time
 import pandas as pd
 import numpy as np
 
+from constants import *
 
-# port
-DNS = 53
-NTP = 123
-SSDP = 1900
-# protocols
-TCP = 6
-UDP = 17
-# random seed
-SEED = 7
-# non-IoT devices
-NON_IOT = ['laptop', 'androidphone', 'macbook', 'iphone', 'macbookiphone', 'samsunggalaxytab', '']
-
-# location that outputs will be saved in
-data_path = 'data/'
-dest_path = data_path + 'parsed_datasets/'
-src_path = data_path + 'data_csv/'
 
 # return dict of devices and their MAC address
 def read_device_list(file_name='List_Of_Devices.txt'):
@@ -40,11 +25,6 @@ def device_list_to_csv(output_file='DeviceList.csv'):
     df['isIoT'] = df['Device'].apply(lambda x: 0 if x in NON_IOT else 1)
     df.to_csv(output_file)
     return df
-
-# get index from 'col' that contain 'find_str'
-# def find_string(df, col, find_str):
-#     indx = df[col].apply(lambda x: True if find_str in x else False)
-#     return list(df[indx].index)
 
 # get index from columns in dataframe that contain 'find_str'
 def find_match(df, src_col, dst_col, find_str):
@@ -62,24 +42,46 @@ def count_packets(db, byte_col, pkt_col):
     # return out_db
     return out_db.groupby(['MAC_addr', 'TIME']).agg(np.sum).reset_index()
 
+def fill_missing_row(df, day, separate_device=True):
+
+    if not os.path.exists(DATA_FINAL_PATH):
+        os.makedirs(DATA_FINAL_PATH)
+
+    devices = read_device_list()
+    filled_df = pd.DataFrame()
+    
+    for mac in df['MAC_addr'].unique():
+        tmp = df[df['MAC_addr'] == mac].set_index('TIME').reindex(range(0, 86400), fill_value=0)
+        tmp['MAC_addr'] = mac
+        filled_df = filled_df.append(tmp.reset_index(), sort=False)
+    filled_df = filled_df.reset_index().drop(columns='index')
+    
+    if separate_device:
+        for mac in filled_df['MAC_addr'].unique():
+            tmp = filled_df[filled_df['MAC_addr'] == mac].copy()
+            tmp.drop(columns='MAC_addr', inplace=True)
+            tmp = tmp.reset_index().drop(columns='index')
+            dev = list(devices.keys())[list(devices.values()).index(mac)]
+            tmp.set_index('TIME')
+            tmp.to_csv(DATA_FINAL_PATH + dev + '_' + day, index=False)
+            print('filled missing rows, {}'.format(dev + '_' + day))
+    else:
+        filled_df.set_index('TIME')
+        filled_df.to_csv(DATA_FINAL_PATH + f, index=False)
+        print('filled missing rows, {}'.format(DATA_FINAL_PATH + day))
 
 def parse_data(start_time=0, end_time=86400):
     start_time = time.time()
     device_count = 0
     device_list = device_list_to_csv()
 
-    if not os.path.exists(dest_path):
-        os.makedirs(dest_path)
+    if not os.path.exists(DATA_FINAL_PATH):
+        os.makedirs(DATA_FINAL_PATH)
 
-    # for _, row in device_list.iterrows():
-    #     target_MAC = row['MAC']
-    #     target_device = row['Device']
-    #     device_count += 1
-
-    for day in os.listdir(src_path):
+    for day in os.listdir(RAW_CSV_PATH):
         if '.csv' not in day: continue
         try:
-            IoT_df = pd.read_csv(src_path + day)
+            IoT_df = pd.read_csv(RAW_CSV_PATH + day)
             # reduce file-size
             IoT_df = IoT_df.astype({
                 'TIME': 'int32', 'Size': 'uint16', 
@@ -205,43 +207,9 @@ def parse_data(start_time=0, end_time=86400):
         ind = list(final_df['MAC_addr'].apply(lambda x: 1 if x in devices else np.nan).dropna().index)
         final_df = final_df.iloc[ind].reset_index().drop(columns='index')
         
-        final_df.to_csv(dest_path + 'parsed_' + day, index=True)
+        # final_df.to_csv(DATA_FINAL_PATH + 'parsed_' + day, index=True)
+        fill_missing_row(final_df, day)
         print('parsed {}'.format(day))
-
-def fill_missing(separate_device=False):
-
-    path = data_path + 'filled_datasets/'
-    if not os.path.exists(path):
-        os.makedirs(path)
-
-    devices = read_device_list()
-
-    for f in os.listdir(dest_path):
-
-        if '.csv' not in f: continue
-        df = pd.read_csv(dest_path + f)
-        df.drop(columns='Unnamed: 0', inplace=True)
-        filled_df = pd.DataFrame()
-        
-        for mac in df['MAC_addr'].unique():
-            tmp = df[df['MAC_addr'] == mac].set_index('TIME').reindex(range(0, 86400), fill_value=0)
-            tmp['MAC_addr'] = mac
-            filled_df = filled_df.append(tmp.reset_index(), sort=False)
-        filled_df = filled_df.reset_index().drop(columns='index')
-        
-        if separate_device:
-            for mac in filled_df['MAC_addr'].unique():
-                tmp = filled_df[filled_df['MAC_addr'] == mac].copy()
-                tmp.drop(columns='MAC_addr', inplace=True)
-                tmp = tmp.reset_index().drop(columns='index')
-                dev = list(devices.keys())[list(devices.values()).index(mac)]
-                tmp.set_index('TIME')
-                tmp.to_csv(path + dev + '_' + f.replace('parsed_', ''), index=False)
-                print('filled missing rows, {}'.format(dev + '_' + f.replace('parsed_', '')))
-        else:
-            filled_df.set_index('TIME')
-            filled_df.to_csv(path + f, index=False)
-            print('filled missing rows, {}'.format(path + f))
 
 
 if __name__ == '__main__':
@@ -249,8 +217,3 @@ if __name__ == '__main__':
     print('parsing csv ...')
     parse_data()
     print('Completed\n\n')
-
-    print('fill missing zero ...')
-    # fill_missing(separate_device=False)
-    fill_missing(separate_device=True)
-    print('Completed\n')

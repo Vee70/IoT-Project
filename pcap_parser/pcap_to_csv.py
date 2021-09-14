@@ -2,15 +2,12 @@ import csv
 import dpkt
 import os
 import socket
+import struct
 import sys
 import time
-import struct
 
+from constants import *
 
-TCPPROTO = 6
-UDPPROTO = 17
-data_dir = 'data/'
-dest_dir = data_dir + 'data_csv/'
 
 # taken from "https://dpkt.readthedocs.io/en/latest/_modules/examples/print_packets.html"
 def mac_addr(address):
@@ -46,10 +43,7 @@ def pcap_to_csv(pcap_file):
         'IP.proto', 'port.src', 'port.dst'
     ]
 
-    csv_file = pcap_file.replace('.pcap', '.csv').replace(data_dir, dest_dir)
-    # if os.path.exists(csv_file):
-    #     print('{} already exists'.format(csv_file))
-    #     exit()
+    csv_file = pcap_file.replace('.pcap', '.csv').replace(DATA_PATH, RAW_CSV_PATH)
 
     with open(csv_file, 'w') as csv_f:
 
@@ -83,11 +77,6 @@ def pcap_to_csv(pcap_file):
                 if (eth.type != dpkt.ethernet.ETH_TYPE_IP): continue
                 # check if the Ethernet frame contains an IP packet
                 if not isinstance(ip, dpkt.ip.IP): continue
-                # check if the IP packet is TCP or UDP
-                # if ip.p not in (dpkt.ip.IP_PROTO_TCP, dpkt.ip.IP_PROTO_UDP): continue
-                # if type(ip.data) not in (dpkt.tcp.TCP, dpkt.udp.UDP): continue
-
-                # # if isinstance(ip.data, bytes): continue
 
                 temp_data['Packet ID'] = packet_id
                 temp_data['TIME'] = int(ts)
@@ -98,7 +87,7 @@ def pcap_to_csv(pcap_file):
                 temp_data['IP.src'] = inet_to_str(ip.src)
                 temp_data['IP.dst'] = inet_to_str(ip.dst)
                 if ip.p == dpkt.ip.IP_PROTO_TCP:
-                    temp_data['IP.proto'] = TCPPROTO
+                    temp_data['IP.proto'] = TCP
                     if isinstance(ip.data, bytes):
                         # handle invalid header length
                         try:
@@ -111,7 +100,7 @@ def pcap_to_csv(pcap_file):
                         temp_data['port.src'] = ip.tcp.sport
                         temp_data['port.dst'] = ip.tcp.dport
                 elif ip.p == dpkt.ip.IP_PROTO_UDP:
-                    temp_data['IP.proto'] = UDPPROTO
+                    temp_data['IP.proto'] = UDP
                     if isinstance(ip.data, bytes):
                         temp_data['port.src'] = dpkt.udp.UDP(ip.data).sport
                         temp_data['port.dst'] = dpkt.udp.UDP(ip.data).dport
@@ -125,24 +114,16 @@ def pcap_to_csv(pcap_file):
 
 def convert_file():
 
-    if not os.path.exists(dest_dir):
-        os.makedirs(dest_dir)
+    if not os.path.exists(RAW_CSV_PATH):
+        os.makedirs(RAW_CSV_PATH)
 
     print('converting pcap to csv ...')
-    for f in os.listdir(data_dir):
+    for f in os.listdir(DATA_PATH):
         if '.pcap' not in f: continue
-        pcap_to_csv('{}{}'.format(data_dir, f))
+        pcap_to_csv('{}{}'.format(DATA_PATH, f))
         print('{} completed'.format(f))
 
 
 if __name__ == '__main__':
-
-    # start = time.time()
-
-    # input_file = sys.argv[1]
-    # pcap_to_csv(input_file)
-
-    # end = time.time()
-    # print(end - start)
 
     convert_file()
